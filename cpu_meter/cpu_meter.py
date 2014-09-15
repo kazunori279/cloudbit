@@ -24,7 +24,7 @@ def read_dstat():
         yield p.stdout.readline().strip()
 
 def extract_cpu_usage(line):
-    m = PATTERN_DSTAT_CPU_IDLE.match(l)
+    m = PATTERN_DSTAT_CPU_IDLE.match(line)
     if m:
         return str(int(100.0 - float(m.group(1))))
     else:
