@@ -1,4 +1,5 @@
-#!/usr/bin/python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 #
 # cpu_meter.py: reads dstat CPU usage (usr+sys) periodically and send it to cloudbit.
 # (requires dstat installed)
