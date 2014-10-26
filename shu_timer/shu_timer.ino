@@ -46,7 +46,7 @@ void loop() {
 
 // decrease timerValue every one sec if timer is not stopped
 void ticking() {
-  if (lastTick == 0 || millis() - lastTick > 1000) {
+  if (millis() - lastTick > 1000) {
     lastTick = millis();
     timerValuePrev = timerValue;
     if (timerValue > 0 && !isStopped) {
