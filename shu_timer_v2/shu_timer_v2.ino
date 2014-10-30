@@ -6,6 +6,7 @@
  */
 
 // melody notes
+#define _0 0
 #define _C 262
 #define _D 294
 #define _E 330
@@ -22,7 +23,7 @@ const int STOP_BTN = A1; // timer stop button input at A1
 const int SPEAKER_OUT = 1; // blinker LED and speaker output at D1
 const int COUNTER_LED = 5; // counter 7-seg LED output at D5
 const int CLOUDBIT_OUT = 9; // cloudBit output at D9
-const int START_TIMER_VAL = 5; // the unit amount for starting timer in seconds
+const int START_TIMER_VAL = 20 * 60; // the unit amount for starting timer in seconds
 const int MAX_TIMER_VAL = 99 * 60; // max amount of timer in seconds
 const int ANALOG_HIGH_THRETHOLD = 100; // threshold to determine an analog value is HIGH
 const int MAX_MELODY_COUNT = 1; // how many times melody will be played at alarming
@@ -32,20 +33,17 @@ const int pooh_melody[] =
  {_B, _A, _G, _F, _D, _C, _D, _C, 
   _A, _B, _A, _G, _F, _G, _A,
   _C, _B, _A, _G, _F, _G, _c, _A, _F,
-  _C, _D, _E, _F, _E, _D, _C, _F};
+  _C, _D, _E, _F, _E, _D, _C, _F, _0};
 
 // durations of the melody
 const int duration[] = 
  {1, 1, 1, 2, 1, 2, 1, 2,
   1, 1, 1, 1, 2, 1, 4,
   1, 1, 1, 1, 2, 1, 2, 1, 2,
-  1, 1, 1, 1, 1, 1, 1, 4};
-
-// total number of notes
-const int NOTES_COUNT = 4;
-
-// duration of each note
-const int NOTE_DUR = 200;
+  1, 1, 1, 1, 1, 1, 1, 4, 8};
+const int NOTES_COUNT = 33; // total number of notes
+const int NOTE_DUR = 200; // duration of each note
+const float NOTE_DUTY = 0.7; // duty ratio of each note
 
 // states
 int timerValue = 0; // current timer value
@@ -80,7 +78,7 @@ void loop() {
   checkTimerTimeout();
   checkCloudBitInput();
   playClick();
-  playMelody();
+  playNextTone();
 }
 
 // decrease timerValue every one sec if timer is not stopped
@@ -117,9 +115,7 @@ void reset() {
   timerValuePrev = 0;
   isCloudBitInputHigh = false;
   melodyCount = 0;
-  noteIndex = 0;
-  nextToneTime = 0;
-  nextNoToneTime = 0;
+  resetMelody();
 }
 
 // if start button is pressed, increase timerValue by START_VAL
@@ -138,27 +134,28 @@ void checkStartButton() {
 
 // output to counter 7seg LED
 void displayCounter() {
-  // maps 6000 sec to 100 minutes on littleBits LED
-  analogWrite(COUNTER_LED, map(timerValue, 0, 59, 0, 255));
-//  analogWrite(COUNTER_LED, map(timerValue, 0, 5999, 0, 255));
-}
-
-// output to cloudBit when timer counting is finished
-void checkTimerTimeout() {
-  if (false && timerValue == 0 && timerValuePrev == 1) {
-    analogWrite(CLOUDBIT_OUT, 255);
-    delay(100);
-    analogWrite(CLOUDBIT_OUT, 0);
-    melodyCount = MAX_MELODY_COUNT;
+  // output only when it's not playing melody (to avoid internal timer conflict)
+  if (melodyCount == 0) {
+    analogWrite(COUNTER_LED, map(timerValue, 0, 5999, 0, 255)); // maps 6000 sec to 100 minutes on littleBits LED
   }
 }
 
-// check input from cloudBit to play alarm
+// output to cloudBit and play melody when timer counting is finished
+void checkTimerTimeout() {
+  if (timerValue == 0 && timerValuePrev == 1) {
+    analogWrite(CLOUDBIT_OUT, 255);
+    delay(100);
+    analogWrite(CLOUDBIT_OUT, 0);
+    startPlayingMelody();
+  }
+}
+
+// check input from cloudBit to play melody
 void checkCloudBitInput() {
   int cloudBitInput = analogRead(CLOUDBIT_IN);
   if (cloudBitInput >= ANALOG_HIGH_THRETHOLD && !isCloudBitInputHigh) {
     isCloudBitInputHigh = true;
-    melodyCount = MAX_MELODY_COUNT;
+    startPlayingMelody();
   }
   if (cloudBitInput < ANALOG_HIGH_THRETHOLD) {
     isCloudBitInputHigh = false;
@@ -185,7 +182,7 @@ void playClick() {
 
   // if timer is ticking, blink it
   int blinkerValue = LOW;
-  if(timerValue % 2 == 0) {
+  if (timerValue % 2 == 0) {
     blinkerValue = LOW;
   } else {
     blinkerValue = HIGH;
@@ -193,17 +190,28 @@ void playClick() {
   digitalWrite(SPEAKER_OUT, blinkerValue);
 }
 
-// play the melody if melodyCount > 0
-void playMelody() {  
+// start playing melody for MAX_MELODY_COUNT times
+void startPlayingMelody() {
+  melodyCount = MAX_MELODY_COUNT;
+  analogWrite(COUNTER_LED, 0); // to avoid conflict with tone()
+}
+
+// play next tone if melodyCount > 0
+void playNextTone() {  
   
-  // if melody is not playing, return
+  // if it is not playing melody, return
   if (melodyCount == 0) return;
   
   // if next tone time has reached, play next note
   if (millis() > nextToneTime) {
-    tone(SPEAKER_OUT, pooh_melody[noteIndex]);
+    int nextTone = pooh_melody[noteIndex];
+    if (nextTone != _0) {
+      tone(SPEAKER_OUT, nextTone);
+    } else {
+      noTone(SPEAKER_OUT);
+    }
     nextToneTime = millis() + (duration[noteIndex] * NOTE_DUR);
-    nextNoToneTime = millis() + (duration[noteIndex] * NOTE_DUR * 0.7);
+    nextNoToneTime = millis() + (duration[noteIndex] * NOTE_DUR * NOTE_DUTY);
     noteIndex++;
   }
 
@@ -211,13 +219,26 @@ void playMelody() {
   if (millis() > nextNoToneTime) {
     noTone(SPEAKER_OUT);
 
-    // if all notes has been played, decrease melodyCount.
+    // if all notes has been played, stop the melody and decrease melodyCount.
     if (noteIndex == NOTES_COUNT) {
-      noteIndex = 0;
-      nextToneTime = 0;
-      nextNoToneTime = 0;
+      resetMelody();
       melodyCount--;
     }
   }
+}
+
+// reset states for playing melody
+void resetMelody() {
+  
+  // reset variables for tone generation
+  noteIndex = 0;
+  nextToneTime = 0;
+  nextNoToneTime = 0;
+
+  // reset internal timer after using tone()/noTone()
+  // see http://discuss.littlebits.cc/t/analogwrite-on-d5-doesnt-work-after-using-tone/7833
+  noTone(SPEAKER_OUT);
+  TCCR3A = 1;
+  TCCR3B = 3;  
 }
 
