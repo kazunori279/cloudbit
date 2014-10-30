@@ -22,10 +22,9 @@ const int STOP_BTN = A1; // timer stop button input at A1
 const int SPEAKER_OUT = 1; // blinker LED and speaker output at D1
 const int COUNTER_LED = 5; // counter 7-seg LED output at D5
 const int CLOUDBIT_OUT = 9; // cloudBit output at D9
-
-const int START_VAL = 20 * 60; // the unit amount for starting timer in seconds
-const int MAX_VAL = 99 * 60; // max amount of timer in seconds
-
+const int START_TIMER_VAL = 5; // the unit amount for starting timer in seconds
+const int MAX_TIMER_VAL = 99 * 60; // max amount of timer in seconds
+const int ANALOG_HIGH_THRETHOLD = 100; // threshold to determine an analog value is HIGH
 const int MAX_MELODY_COUNT = 1; // how many times melody will be played at alarming
 
 // notes of "winny the pooh"
@@ -43,7 +42,7 @@ const int duration[] =
   1, 1, 1, 1, 1, 1, 1, 4};
 
 // total number of notes
-const int NOTES_COUNT = 32;
+const int NOTES_COUNT = 4;
 
 // duration of each note
 const int NOTE_DUR = 200;
@@ -55,6 +54,7 @@ boolean isStopped = false; // is timer stopped?
 int startBtnPrev = LOW; // previous start button value
 int stopBtnPrev = 0; // previous stop button value
 int timerValuePrev = 0; // previous timer value
+boolean isCloudBitInputHigh = false; // is cloudBit input HIGH?
 int melodyCount = 0; // remaining count of melody play
 int noteIndex = 0; // current note index
 unsigned long nextToneTime = 0; // time to play next tone
@@ -62,6 +62,9 @@ unsigned long nextNoToneTime = 0; // time to stop play tone
 
 // setup
 void setup() {
+  pinMode(START_BTN, INPUT);
+  pinMode(CLOUDBIT_IN, INPUT);
+  pinMode(STOP_BTN, INPUT);
   pinMode(SPEAKER_OUT, OUTPUT);
   pinMode(COUNTER_LED, OUTPUT);
   pinMode(CLOUDBIT_OUT, OUTPUT);
@@ -74,7 +77,8 @@ void loop() {
   ticking();
   checkStartButton();
   checkStopButton();
-  checkTimeout();
+  checkTimerTimeout();
+  checkCloudBitInput();
   playClick();
   playMelody();
 }
@@ -94,7 +98,7 @@ void ticking() {
 // if stop button is pressed, stop the timer. If it's already stopped, reset the timer
 void checkStopButton() {
   boolean stopBtn = analogRead(STOP_BTN);
-  if (stopBtn > 200 && stopBtnPrev == 0) {
+  if (stopBtn > ANALOG_HIGH_THRETHOLD && stopBtnPrev == 0) {
     if (isStopped || melodyCount > 0) {
       reset();
     } else {
@@ -111,25 +115,54 @@ void reset() {
   startBtnPrev = LOW;
   stopBtnPrev = 0;
   timerValuePrev = 0;
+  isCloudBitInputHigh = false;
   melodyCount = 0;
   noteIndex = 0;
   nextToneTime = 0;
   nextNoToneTime = 0;
-  noTone(SPEAKER_OUT);
 }
 
 // if start button is pressed, increase timerValue by START_VAL
 void checkStartButton() {
-  boolean startBtn = digitalRead(START_BTN);
+  int startBtn = digitalRead(START_BTN);
   if (startBtn == HIGH && startBtnPrev == LOW) {
     if (isStopped) {
       isStopped = false;
     } else {
-      timerValue = min(timerValue + START_VAL, MAX_VAL);
+      timerValue = min(timerValue + START_TIMER_VAL, MAX_TIMER_VAL);
     }
   }
   startBtnPrev = startBtn;
   displayCounter();
+}
+
+// output to counter 7seg LED
+void displayCounter() {
+  // maps 6000 sec to 100 minutes on littleBits LED
+  analogWrite(COUNTER_LED, map(timerValue, 0, 59, 0, 255));
+//  analogWrite(COUNTER_LED, map(timerValue, 0, 5999, 0, 255));
+}
+
+// output to cloudBit when timer counting is finished
+void checkTimerTimeout() {
+  if (false && timerValue == 0 && timerValuePrev == 1) {
+    analogWrite(CLOUDBIT_OUT, 255);
+    delay(100);
+    analogWrite(CLOUDBIT_OUT, 0);
+    melodyCount = MAX_MELODY_COUNT;
+  }
+}
+
+// check input from cloudBit to play alarm
+void checkCloudBitInput() {
+  int cloudBitInput = analogRead(CLOUDBIT_IN);
+  if (cloudBitInput >= ANALOG_HIGH_THRETHOLD && !isCloudBitInputHigh) {
+    isCloudBitInputHigh = true;
+    melodyCount = MAX_MELODY_COUNT;
+  }
+  if (cloudBitInput < ANALOG_HIGH_THRETHOLD) {
+    isCloudBitInputHigh = false;
+  }
 }
 
 // output click sound to speaker
@@ -158,22 +191,6 @@ void playClick() {
     blinkerValue = HIGH;
   }
   digitalWrite(SPEAKER_OUT, blinkerValue);
-}
-
-// output to counter 7seg LED
-void displayCounter() {
-  int counterValue = map(timerValue, 0, 5999, 0, 255); // maps 6000 sec to 100 minutes on littleBits LED
-  analogWrite(COUNTER_LED, counterValue);
-}
-
-// output to cloutBit when timer counting is finished
-void checkTimeout() {
-  if (timerValue == 0 && timerValuePrev == 1) {
-    analogWrite(CLOUDBIT_OUT, 255);
-    delay(100);
-    analogWrite(CLOUDBIT_OUT, 0);
-    melodyCount = MAX_MELODY_COUNT;
-  }
 }
 
 // play the melody if melodyCount > 0
