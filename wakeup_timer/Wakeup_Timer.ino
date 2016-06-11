@@ -7,8 +7,7 @@ const int IFTTT_IN = 0;
 const int SENSOR_IN = A0;
 const int SWITCH_IN = A1;
 const int OSC_OUT = 5;
-const int BUZZ_OUT = 1;
-const int DBG_OUT = 9;
+const int BUZZ_OUT = 9;
 
 // melody notes
 #define _0 0
@@ -41,12 +40,12 @@ const int NOTES_COUNT = 33; // total number of notes
 void setup() {
   Serial.begin(9600);
   pinMode(IFTTT_IN, INPUT);
-  pinMode(OSC_OUT, OUTPUT);
   pinMode(SENSOR_IN, INPUT);
   pinMode(SWITCH_IN, INPUT);
+  pinMode(OSC_OUT, OUTPUT);
+  pinMode(BUZZ_OUT, OUTPUT);
   analogWrite(OSC_OUT, 0);
-  digitalWrite(BUZZ_OUT, LOW);
-  analogWrite(DBG_OUT, 0);
+  analogWrite(BUZZ_OUT, 0);
 }
 
 // the main event loop
@@ -68,12 +67,18 @@ void loop() {
 }
 
 void playBuzzer() {
-  for (int i = 0; i < 300 && isEnabled() ; i++) {
-    digitalWrite(BUZZ_OUT, HIGH);
-    delay(500);
-    digitalWrite(BUZZ_OUT, LOW);
-    delay(500);
+  for (int i = 0; i < 300 && isEnabled(); i++) {
+    int d = random(1, 7);
+    for (int j = 100; j < 255; j++) {
+      analogWrite(BUZZ_OUT, j);
+      delay(d);
+    }
+    for (int j = 255; j > 100; j--) {
+      analogWrite(BUZZ_OUT, j);
+      delay(d);
+    }
   }
+  analogWrite(BUZZ_OUT, 0);
 }
 
 void playSongs() {
@@ -108,8 +113,7 @@ void playNote(int note, int duration) {
 }
 
 boolean isEnabled() {
-  printDebug(35);
-  return digitalRead(SWITCH_IN) == HIGH && digitalRead(SENSOR_IN) == LOW;
+  return (digitalRead(SWITCH_IN) == HIGH) && (digitalRead(SENSOR_IN) == LOW);
 }
 
 void printDebug(int code) {
